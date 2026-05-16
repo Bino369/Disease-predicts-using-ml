@@ -1,223 +1,119 @@
 from tkinter import *
-import numpy as np
+from tkinter import ttk
 import joblib
 import os
 import warnings
+import pandas as pd
 
-# Ignore scikit-learn warnings for unlabelled divisions etc. if any
+# Ignore scikit-learn warnings
 warnings.filterwarnings('ignore')
 
-# SYMPTOM LIST (Matches training data order exactly)
-l1=['back_pain','constipation','abdominal_pain','diarrhoea','mild_fever','yellow_urine',
-'yellowing_of_eyes','acute_liver_failure','fluid_overload','swelling_of_stomach',
-'swelled_lymph_nodes','malaise','blurred_and_distorted_vision','phlegm','throat_irritation',
-'redness_of_eyes','sinus_pressure','runny_nose','congestion','chest_pain','weakness_in_limbs',
-'fast_heart_rate','pain_during_bowel_movements','pain_in_anal_region','bloody_stool',
-'irritation_in_anus','neck_pain','dizziness','cramps','bruising','obesity','swollen_legs',
-'swollen_blood_vessels','puffy_face_and_eyes','enlarged_thyroid','brittle_nails',
-'swollen_extremeties','excessive_hunger','extra_marital_contacts','drying_and_tingling_lips',
-'slurred_speech','knee_pain','hip_joint_pain','muscle_weakness','stiff_neck','swelling_joints',
-'movement_stiffness','spinning_movements','loss_of_balance','unsteadiness',
-'weakness_of_one_body_side','loss_of_smell','bladder_discomfort','foul_smell_of urine',
-'continuous_feel_of_urine','passage_of_gases','internal_itching','toxic_look_(typhos)',
-'depression','irritability','muscle_pain','altered_sensorium','red_spots_over_body','belly_pain',
-'abnormal_menstruation','dischromic _patches','watering_from_eyes','increased_appetite','polyuria','family_history','mucoid_sputum',
-'rusty_sputum','lack_of_concentration','visual_disturbances','receiving_blood_transfusion',
-'receiving_unsterile_injections','coma','stomach_bleeding','distention_of_abdomen',
-'history_of_alcohol_consumption','fluid_overload','blood_in_sputum','prominent_veins_on_calf',
-'palpitations','painful_walking','pus_filled_pimples','blackheads','scurring','skin_peeling',
-'silver_like_dusting','small_dents_in_nails','inflammatory_nails','blister','red_sore_around_nose',
-'yellow_crust_ooze']
-
-# INITIALIZE & LOAD MODELS (Instantly ready for prediction)
-print("--- Initializing Prediction System ---")
+# INITIALIZE & LOAD MODELS
+print("--- Initializing Unified Prediction System ---")
 
 def load_pkl_file(filepath):
     if not os.path.exists(filepath):
-        print(f"ERROR: {filepath} not found. Please run 'python train_model.py' first.")
+        print(f"ERROR: {filepath} not found. Please run 'python train_unified_model.py' first.")
         return None
     return joblib.load(filepath)
 
-# Load Transformers
-scaler = load_pkl_file('models/scaler.pkl')
-le = load_pkl_file('models/label_encoder.pkl')
+# Load Unified Models
+unified_model = load_pkl_file('models/unified_model.pkl')
+vectorizer = load_pkl_file('models/unified_vectorizer.pkl')
+le = load_pkl_file('models/unified_label_encoder.pkl')
+treatments_dict = load_pkl_file('models/treatments_dict.pkl')
 
-# Load ML Models
-clf_dt = load_pkl_file('models/decision_tree.pkl')
-clf_rf = load_pkl_file('models/random_forest.pkl')
-clf_svm = load_pkl_file('models/svm_model.pkl')
-
-if all([scaler, le, clf_dt, clf_rf, clf_svm]):
-    print("All models and transformers loaded successfully!")
+if all([unified_model, vectorizer, le, treatments_dict]):
+    print("Unified models and transformers loaded successfully!")
 else:
-    print("WARNING: Some models failed to load. The application might crash.")
+    print("WARNING: Some models failed to load. The application might not function correctly.")
 
-
-# PREDICTION HELPER
-def predict_disease(model):
+# PREDICTION FUNCTION
+def predict_unified():
     """
-    Takes a pre-trained model, transforms the GUI inputs, and predicts the disease.
+    Takes the text input, vectorizes it, and predicts the disease using the unified NLP model.
     """
-    # 1. Reset symptom vector properly to 0s to avoid bleeding from previous clicks
-    l2 = [0] * len(l1)
+    user_input = symptom_text.get("1.0", END).strip()
     
-    psymptoms = [Symptom1.get(), Symptom2.get(), Symptom3.get(), Symptom4.get(), Symptom5.get()]
-    
-    # Track if user selected at least one real symptom
-    valid_symptoms_selected = False
-
-    # 2. Map selected symptoms to the feature vector (l2)
-    for k in range(0, len(l1)):
-        for z in psymptoms:
-            if z == l1[k]:
-                l2[k] = 1
-                valid_symptoms_selected = True
-
-    # Error handling: If no valid symptom was picked
-    if not valid_symptoms_selected:
-        t2.delete("1.0", END)
-        t2.insert(END, "Please select symptoms")
+    if not user_input:
+        result_text.config(text="Please enter symptoms or patient details")
+        treatment_text.config(text="")
         return
 
-    # 3. Transform input for the model
-    inputtest = [l2]
     try:
-        inputtest_scaled = scaler.transform(inputtest)
-    except Exception as e:
-        t2.delete("1.0", END)
-        t2.insert(END, "Scaling Error")
-        return
-
-    # 4. Perform instant prediction
-    try:
-        predict = model.predict(inputtest_scaled)
-        predicted_encoded = predict[0]
+        # Vectorize the input
+        X_vectorized = vectorizer.transform([user_input])
         
-        # Decode the numerical prediction back to string
-        disease_name = le.inverse_transform([predicted_encoded])[0]
+        # Perform prediction
+        prediction_encoded = unified_model.predict(X_vectorized)
+        disease_name = le.inverse_transform(prediction_encoded)[0]
         
-        # Get prediction confidence if the model supports it
-        confidence_str = "--"
-        if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(inputtest_scaled)[0]
-            class_idx = list(model.classes_).index(predicted_encoded)
-            confidence = proba[class_idx] * 100
-            confidence_str = f"{confidence:.1f}%"
-            
-        # Display the result
-        t2.delete("1.0", END)
-        t2.insert(END, disease_name)
-        confidenceLb.config(text=f"Confidence: {confidence_str}")
+        # Update UI with results
+        result_text.config(text=disease_name)
+        
+        # Look up treatment
+        treatment = treatments_dict.get(disease_name, "No standard treatment recorded in database.")
+        treatment_text.config(text=treatment)
+        
     except Exception as e:
-        t2.delete("1.0", END)
-        t2.insert(END, "Prediction Error")
-        confidenceLb.config(text="Confidence: --")
-
-# Button Wrappers
-def DecisionTree():
-    predict_disease(clf_dt)
-
-def randomforest():
-    predict_disease(clf_rf)
-
-def svm():
-    predict_disease(clf_svm)
-
+        result_text.config(text="Prediction Error")
+        treatment_text.config(text=str(e))
 
 # ---------------------------------------------------------------------------------------------------
 # GUI SETUP
 # ---------------------------------------------------------------------------------------------------
 root = Tk()
-root.title("Disease Predictor")
+root.title("All-in-One Disease Predictor")
 root.configure(background='#f0f4f8')
-root.geometry("800x550")
-
-# Entry variables
-Symptom1 = StringVar()
-Symptom1.set("Select Symptom")
-Symptom2 = StringVar()
-Symptom2.set("Select Symptom")
-Symptom3 = StringVar()
-Symptom3.set("Select Symptom")
-Symptom4 = StringVar()
-Symptom4.set("Select Symptom")
-Symptom5 = StringVar()
-Symptom5.set("Select Symptom")
-Name = StringVar()
+root.geometry("850x700")
 
 # Heading
-w2 = Label(root, justify=CENTER, text="Disease Predictor using Machine Learning", fg="#2c3e50", bg="#f0f4f8")
-w2.config(font=("Helvetica", 24, "bold"))
-w2.grid(row=1, column=0, columnspan=3, pady=30)
+header = Label(root, text="Unified Disease Prediction System", font=("Helvetica", 26, "bold"), fg="#2c3e50", bg="#f0f4f8")
+header.pack(pady=30)
 
-# Labels
-label_font = ("Helvetica", 12)
+# Main Frame
+main_frame = Frame(root, bg="#f0f4f8")
+main_frame.pack(padx=50, fill=BOTH, expand=True)
 
-NameLb = Label(root, text="Name of the Patient", fg="#34495e", bg="#f0f4f8", font=label_font)
-NameLb.grid(row=6, column=0, pady=10, padx=50, sticky=W)
+# Name Section
+name_frame = Frame(main_frame, bg="#f0f4f8")
+name_frame.pack(fill=X, pady=10)
 
-S1Lb = Label(root, text="Symptom 1", fg="#34495e", bg="#f0f4f8", font=label_font)
-S1Lb.grid(row=7, column=0, pady=10, padx=50, sticky=W)
+Label(name_frame, text="Patient Name:", font=("Helvetica", 14, "bold"), bg="#f0f4f8", fg="#34495e").pack(side=LEFT, padx=10)
+patient_name = Entry(name_frame, font=("Helvetica", 14), width=30)
+patient_name.pack(side=LEFT, padx=10)
 
-S2Lb = Label(root, text="Symptom 2", fg="#34495e", bg="#f0f4f8", font=label_font)
-S2Lb.grid(row=8, column=0, pady=10, padx=50, sticky=W)
+# Input Section
+Label(main_frame, text="Enter Symptoms, Age, Gender, and Profile Details:", font=("Helvetica", 14, "bold"), bg="#f0f4f8", fg="#34495e").pack(anchor=W, padx=10, pady=(20, 5))
+Label(main_frame, text="(Example: 45 year old male, severe headache, high blood pressure, cough)", font=("Helvetica", 10, "italic"), bg="#f0f4f8", fg="#7f8c8d").pack(anchor=W, padx=10)
 
-S3Lb = Label(root, text="Symptom 3", fg="#34495e", bg="#f0f4f8", font=label_font)
-S3Lb.grid(row=9, column=0, pady=10, padx=50, sticky=W)
+symptom_text = Text(main_frame, height=8, font=("Helvetica", 13), bd=2, relief=FLAT)
+symptom_text.pack(fill=X, padx=10, pady=10)
 
-S4Lb = Label(root, text="Symptom 4", fg="#34495e", bg="#f0f4f8", font=label_font)
-S4Lb.grid(row=10, column=0, pady=10, padx=50, sticky=W)
+# Predict Button
+predict_btn = Button(root, text="Predict Disease & Treatment", command=predict_unified, font=("Helvetica", 16, "bold"), bg="#3498db", fg="black", padx=20, pady=10, cursor="hand2")
+predict_btn.pack(pady=20)
 
-S5Lb = Label(root, text="Symptom 5", fg="#34495e", bg="#f0f4f8", font=label_font)
-S5Lb.grid(row=11, column=0, pady=10, padx=50, sticky=W)
+# Results Section
+result_frame = Frame(root, bg="white", bd=1, relief=SOLID)
+result_frame.pack(padx=50, pady=20, fill=BOTH)
 
-# Result Label
-destreeLb = Label(root, text="Predicted Disease:", fg="#c0392b", bg="#f0f4f8", font=("Helvetica", 14, "bold"))
-destreeLb.grid(row=15, column=0, pady=30, padx=50, sticky=W)
+# Predicted Disease
+disease_label_frame = Frame(result_frame, bg="white")
+disease_label_frame.pack(fill=X, padx=20, pady=(20, 10))
+Label(disease_label_frame, text="PREDICTED DISEASE:", font=("Helvetica", 12, "bold"), fg="#e74c3c", bg="white").pack(side=LEFT)
+result_text = Label(disease_label_frame, text="---", font=("Helvetica", 16, "bold"), fg="#c0392b", bg="white")
+result_text.pack(side=LEFT, padx=20)
 
-# Entries
-OPTIONS = sorted(l1)
+# Treatment
+treatment_label_frame = Frame(result_frame, bg="white")
+treatment_label_frame.pack(fill=X, padx=20, pady=(0, 20))
+Label(treatment_label_frame, text="RECOMMENDED TREATMENT:", font=("Helvetica", 12, "bold"), fg="#27ae60", bg="white").pack(anchor=NW)
+treatment_text = Label(treatment_label_frame, text="---", font=("Helvetica", 11), fg="#2c3e50", bg="white", wraplength=700, justify=LEFT)
+treatment_text.pack(anchor=NW, pady=5)
 
-NameEn = Entry(root, textvariable=Name, font=label_font, width=25)
-NameEn.grid(row=6, column=1)
+# Footer
+Label(root, text="Algorithm: Random Forest Classifier with TF-IDF Vectorization", font=("Helvetica", 10, "bold"), bg="#f0f4f8", fg="#34495e").pack(side=BOTTOM, pady=(0, 5))
+Label(root, text="Note: This is a machine learning prediction. Consult a professional for medical advice.", font=("Helvetica", 9), bg="#f0f4f8", fg="#95a5a6").pack(side=BOTTOM, pady=5)
 
-S1En = OptionMenu(root, Symptom1,*OPTIONS)
-S1En.config(width=20, font=label_font)
-S1En.grid(row=7, column=1)
-
-S2En = OptionMenu(root, Symptom2,*OPTIONS)
-S2En.config(width=20, font=label_font)
-S2En.grid(row=8, column=1)
-
-S3En = OptionMenu(root, Symptom3,*OPTIONS)
-S3En.config(width=20, font=label_font)
-S3En.grid(row=9, column=1)
-
-S4En = OptionMenu(root, Symptom4,*OPTIONS)
-S4En.config(width=20, font=label_font)
-S4En.grid(row=10, column=1)
-
-S5En = OptionMenu(root, Symptom5,*OPTIONS)
-S5En.config(width=20, font=label_font)
-S5En.grid(row=11, column=1)
-
-# Predict Buttons
-dt = Button(root, text="Decision Tree", command=DecisionTree, font=("Helvetica", 14, "bold"), width=15)
-dt.grid(row=8, column=2, padx=40)
-
-rnf = Button(root, text="Random Forest", command=randomforest, font=("Helvetica", 14, "bold"), width=15)
-rnf.grid(row=9, column=2, padx=40)
-
-svm_btn = Button(root, text="SVM Predict", command=svm, font=("Helvetica", 14, "bold"), width=15)
-svm_btn.grid(row=10, column=2, padx=40)
-
-# Result textfield
-t2 = Text(root, height=1, width=25, bg="white", fg="#e74c3c", font=("Helvetica", 16, "bold"), bd=0)
-t2.grid(row=15, column=1 , padx=10, sticky=W)
-
-# Confidence Label
-confidenceLb = Label(root, text="Confidence: --", fg="#2980b9", bg="#f0f4f8", font=("Helvetica", 14, "bold"))
-confidenceLb.grid(row=15, column=2, padx=10, sticky=W)
-
-# Run UI
 root.mainloop()

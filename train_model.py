@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_score, recall_score
 from sklearn import tree
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifierman
 from sklearn.svm import SVC
 import warnings
 
@@ -49,7 +49,7 @@ def main():
     
     # 1. Load Data
     print("\n[1/5] Loading Data...")
-    df = pd.read_csv("Training.csv")
+    df = pd.read_csv("dataset/Training.csv")
     print(f"Original dataset shape: {df.shape}")
 
     # 2. Preprocess Data
